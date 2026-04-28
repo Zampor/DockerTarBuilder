@@ -15,6 +15,14 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # 2. 登录 GHCR（确保私有 Dify 镜像可以拉取）
+    - name: Login to GHCR
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GHCR_PAT }}
+
     - name: Clean up Docker to free space
       run: |
           docker system prune -a -f
