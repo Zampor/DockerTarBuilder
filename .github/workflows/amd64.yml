@@ -1,49 +1,55 @@
-name: x86-64 Pull and Save Docker Image
+name: Build Docker Tars (amd64)
+
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 手动触发
     inputs:
-      docker_images:
-        description: '请填写docker镜像名称 多个用英文逗号分开'
+      images:
+        description: 'Comma-separated list of images to download'
         required: true
-        default: 'alpine:latest,busybox:stable-glibc'  # 设置默认的 Docker 镜像列表
+        default: "ghcr.io/dify-ai/dify:latest,postgres:15,redis:7,traefik:2.10"
 
 jobs:
-  pull_and_package:
-    runs-on: ubuntu-22.04
-
+  build:
+    runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      # 1. 检出仓库
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    # 2. 登录 GHCR（确保私有 Dify 镜像可以拉取）
-    - name: Login to GHCR
-      uses: docker/login-action@v2
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GHCR_PAT }}
+      # 2. 登录 GHCR（确保私有 Dify 镜像可以拉取）
+      - name: Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
 
-    - name: Clean up Docker to free space
-      run: |
-          docker system prune -a -f
-          docker volume prune -f
+      # 3. 安装 DockerTarBuilder（假设 Python 版本 3.9+）
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-    - name: Pull Docker Images and Package
-      run: |
-        images="${{ github.event.inputs.docker_images }}"
-          IFS=',' read -r -a image_array <<< "$images"
-          for image in "${image_array[@]}"; do
-            docker pull "${image}" --platform "linux/amd64"
-            image_name="${image//\//_}"
-            image_name="${image_name//:/_}"
-            docker save "${image}" -o "${image_name}-amd64.tar"
-            gzip -c "${image_name}-amd64.tar" > "${image_name}-amd64.tar.gz"
-            rm "${image_name}-amd64.tar"
+      - name: Install requirements
+        run: |
+          pip install -r requirements.txt
+
+      # 4. 拉取镜像并导出 tar
+      - name: Pull and export Docker images
+        run: |
+          echo "Images to pull: ${{ github.event.inputs.images }}"
+          IFS=',' read -ra IMAGES <<< "${{ github.event.inputs.images }}"
+          for image in "${IMAGES[@]}"; do
+            echo "Pulling $image..."
+            docker pull $image
+            tarfile=$(echo $image | tr "/:" "_").tar
+            echo "Saving $image to $tarfile"
+            docker save -o $tarfile $image
           done
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: my-artifact
-        path: ${{ github.workspace }}/*.tar.gz
-        retention-days: 1  # 将保留天数设置为 1 天 最多可设置90天
+      # 5. 上传 artifact 以便下载
+      - name: Upload tar files
+        uses: actions/upload-artifact@v3
+        with:
+          name: docker-tar-files
+          path: "*.tar"
