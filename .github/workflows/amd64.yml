@@ -1,7 +1,7 @@
 name: Build Docker Tars (amd64)
 
 on:
-  workflow_dispatch: # 手动触发
+  workflow_dispatch:
     inputs:
       images:
         description: 'Comma-separated list of images to download'
@@ -11,12 +11,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       # 1. 检出仓库
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. 登录 GHCR（确保私有 Dify 镜像可以拉取）
+      # 2. 登录 GHCR
       - name: Login to GHCR
         uses: docker/login-action@v2
         with:
@@ -24,7 +25,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      # 3. 安装 DockerTarBuilder（假设 Python 版本 3.9+）
+      # 3. 安装 Python（如果 DockerTarBuilder 需要 Python）
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -32,10 +33,10 @@ jobs:
 
       - name: Install requirements
         run: |
-          pip install -r requirements.txt
+          pip install -r requirements.txt || echo "No requirements.txt found, skip"
 
       # 4. 拉取镜像并导出 tar
-      - name: Pull and export Docker images
+      - name: Pull and save Docker images
         run: |
           echo "Images to pull: ${{ github.event.inputs.images }}"
           IFS=',' read -ra IMAGES <<< "${{ github.event.inputs.images }}"
@@ -47,9 +48,9 @@ jobs:
             docker save -o $tarfile $image
           done
 
-      # 5. 上传 artifact 以便下载
+      # 5. 上传 artifact (v4)
       - name: Upload tar files
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: docker-tar-files
           path: "*.tar"
